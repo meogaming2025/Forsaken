@@ -4,22 +4,23 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local CoreGui = game:GetService("CoreGui") -- Thêm CoreGui để né quét
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui") 
 
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui") 
 
 --// Tạo luồng chạy độc lập
 task.spawn(function()
-    -- Lấy nhanh RemoteEvent không dùng WaitForChild vô hạn
     local modules = ReplicatedStorage:FindFirstChild("Modules")
     local network = modules and modules:FindFirstChild("Network")
     local RemoteEvent = network and network:FindFirstChild("RemoteEvent")
 
-    --// GUI Setup - ĐƯỢC ĐẨY THẲNG VÀO COREGUI ĐỂ CHỐNG XÓA
+    --// GUI Setup
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "ChanceAimbotUI_Protected"
     screenGui.ResetOnSpawn = false
-    screenGui.Parent = CoreGui -- Né bộ quét của game cực tốt
+    screenGui.Parent = CoreGui
 
     -- Main draggable frame
     local mainFrame = Instance.new("Frame")
@@ -127,6 +128,43 @@ task.spawn(function()
     predictionBox.Visible = true
     predictionBox.Parent = mainFrame
 
+    local messageToggleButton = Instance.new("TextButton")
+    messageToggleButton.Size = UDim2.new(0, 140, 0, 30)
+    messageToggleButton.LayoutOrder = 6
+    messageToggleButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    messageToggleButton.TextColor3 = Color3.new(1, 1, 1)
+    messageToggleButton.Text = "Message When Aim: OFF"
+    messageToggleButton.Parent = mainFrame
+
+    local messageBox = Instance.new("TextBox")
+    messageBox.Size = UDim2.new(0, 140, 0, 30)
+    messageBox.LayoutOrder = 7
+    messageBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    messageBox.TextColor3 = Color3.new(1, 1, 1)
+    messageBox.PlaceholderText = "Message to send"
+    messageBox.ClearTextOnFocus = false
+    messageBox.Text = "Target Locked!"
+    messageBox.Visible = false
+    messageBox.Parent = mainFrame
+
+    local autoCoinflipToggle = Instance.new("TextButton")
+    autoCoinflipToggle.Size = UDim2.new(0, 140, 0, 30)
+    autoCoinflipToggle.LayoutOrder = 8
+    autoCoinflipToggle.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    autoCoinflipToggle.TextColor3 = Color3.new(1, 1, 1)
+    autoCoinflipToggle.Text = "Auto Coinflip: OFF"
+    autoCoinflipToggle.Parent = mainFrame
+
+    -- ĐÃ CHỈNH SỬA: Chuyển pointsTriggerBox cũ thành Nút bấm chuyển Mode lựa chọn số lượng Charges
+    local chargesLimitButton = Instance.new("TextButton")
+    chargesLimitButton.Size = UDim2.new(0, 140, 0, 30)
+    chargesLimitButton.LayoutOrder = 9
+    chargesLimitButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    chargesLimitButton.TextColor3 = Color3.new(1, 1, 1)
+    chargesLimitButton.Text = "Stop at Charges: 2" -- Mặc định ban đầu là mốc 2
+    chargesLimitButton.Visible = false
+    chargesLimitButton.Parent = mainFrame
+
     -- Config & States
     local active = false
     local predictionMode = "Velocity"
@@ -136,12 +174,25 @@ task.spawn(function()
     local movementThreshold = 0.5
     local aimTargets = {"Slasher", "c00lkidd", "JohnDoe", "1x1x1x1", "Noli", "Guest666", "Nosferatu", "REDZ_GUY", "skibidi", "kibidi", "tommylikesroblox"}
 
+    local messageWhenAim = false
+    local messageSentThisAim = false
+    
+    -- Cấu hình Coin Flip V12 tối ưu chống lag mới
+    local autoCoinflip = false
+    local maxChargesLimit = 2 -- Lưu trữ số lượng giới hạn hiện tại
+    local coinflipCooldown = 1.76 
+
+    -- Các biến ghim mục tiêu UI Coin Flip
+    local targetChargesLabel = nil
+    local targetCoinFlipBtn = nil
+
     local Humanoid, HRP = nil, nil
     local lastTriggerTime = 0
     local aiming = false
     local prevFlintVisibleAim = false
     local originalAutoRotate = nil
 
+    -- Buttons Logic
     toggleButton.MouseButton1Click:Connect(function()
         active = not active
         toggleButton.Text = active and "Chance Aim: ON" or "Chance Aim: OFF"
@@ -181,7 +232,31 @@ task.spawn(function()
         end
     end)
 
+    messageToggleButton.MouseButton1Click:Connect(function()
+        messageWhenAim = not messageWhenAim
+        messageToggleButton.Text = messageWhenAim and "Message When Aim: ON" or "Message When Aim: OFF"
+        messageBox.Visible = messageWhenAim
+    end)
+
+    autoCoinflipToggle.MouseButton1Click:Connect(function()
+        autoCoinflip = not autoCoinflip
+        autoCoinflipToggle.Text = autoCoinflip and "Auto Coinflip: ON" or "Auto Coinflip: OFF"
+        chargesLimitButton.Visible = autoCoinflip
+    end)
+
     spinSpeedBox.FocusLost:Connect(function() spinDuration = tonumber(spinSpeedBox.Text) or 0.5 end)
+    
+    -- ĐÃ CHỈNH SỬA: Logic click chuột đổi mốc theo vòng lặp tuần hoàn (1 -> 2 -> 3 -> 1)
+    chargesLimitButton.MouseButton1Click:Connect(function()
+        if maxChargesLimit == 1 then
+            maxChargesLimit = 2
+        elseif maxChargesLimit == 2 then
+            maxChargesLimit = 3
+        else
+            maxChargesLimit = 1
+        end
+        chargesLimitButton.Text = "Stop at Charges: " .. tostring(maxChargesLimit)
+    end)
 
     -- Helpers
     local function setupCharacter(char)
@@ -197,6 +272,83 @@ task.spawn(function()
         return pingStat and (pingStat:GetValue() / 1000) or 0.1
     end
 
+    local function sendChatMessage(text)
+        if not text or text:match("^%s*$") then return end
+        pcall(function()
+            local TextChatService = game:GetService("TextChatService")
+            local channel = TextChatService.TextChannels.RBXGeneral
+            if channel then channel:SendAsync(text) end
+        end)
+    end
+
+    -- CẢI TIẾN V12: Hàm quét định vị mục tiêu UI Coin Flip (Chỉ chạy định vị 1 lần, chống Lag diện rộng)
+    local function locateCoinFlipObjects()
+        if targetChargesLabel and targetCoinFlipBtn and targetChargesLabel.Parent and targetCoinFlipBtn.Parent then
+            return 
+        end
+
+        pcall(function()
+            for _, obj in ipairs(PlayerGui:GetDescendants()) do
+                if obj:IsA("GuiButton") or obj:IsA("ImageButton") or obj:IsA("TextButton") then
+                    -- Tìm đúng nhãn chứa số charges thật (0-3) ở nút Reroll / One shot
+                    local isRef = false
+                    for _, child in ipairs(obj:GetDescendants()) do
+                        if child:IsA("TextLabel") then
+                            local textLower = string.lower(child.Text)
+                            if string.find(textLower, "one shot") or string.find(textLower, "reroll") then
+                                isRef = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if isRef then
+                        local validLabels = {}
+                        for _, child in ipairs(obj:GetDescendants()) do
+                            if child:IsA("TextLabel") then
+                                local num = tonumber(child.Text)
+                                if num and num >= 0 and num <= 3 then
+                                    table.insert(validLabels, child)
+                                end
+                            end
+                        end
+                        if #validLabels > 0 then
+                            table.sort(validLabels, function(a, b)
+                                return a.AbsolutePosition.Y < b.AbsolutePosition.Y
+                            end)
+                            targetChargesLabel = validLabels[1]
+                        end
+                    end
+                    
+                    -- Tìm nút Coin Flip
+                    if not targetCoinFlipBtn then
+                        for _, child in ipairs(obj:GetDescendants()) do
+                            if child:IsA("TextLabel") and string.find(string.lower(child.Text), "coin") then
+                                targetCoinFlipBtn = obj
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Hàm ép nổ toàn diện kết nối (Bấm chuột ảo bọc lót V12 chuẩn xác)
+    local function extremeClick(button)
+        if not button then return end
+        local events = {"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated", "InputBegan", "TouchTap"}
+        for _, eventName in ipairs(events) do
+            pcall(function()
+                local connections = getconnections(button[eventName])
+                for _, connection in ipairs(connections) do
+                    if connection.Function then task.spawn(connection.Function) end
+                    connection:Fire()
+                end
+            end)
+        end
+    end
+
     local function getValidTarget()
         local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
         if killersFolder then
@@ -204,16 +356,13 @@ task.spawn(function()
                 local target = killersFolder:FindFirstChild(name)
                 if target and target:FindFirstChild("HumanoidRootPart") then
                     local hum = target:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.Health > 0 then
-                        return target.HumanoidRootPart, hum
-                    end
+                    if hum and hum.Health > 0 then return target.HumanoidRootPart, hum end
                 end
             end
         end
         return nil, nil
     end
 
-    -- Hàm tính toán vị trí nhắm bắn
     local function CalculateAimPosition(targetHRP)
         if not targetHRP then return nil end
         local velocity = targetHRP.Velocity
@@ -223,13 +372,11 @@ task.spawn(function()
             return targetHRP.Position + (velocity * getPingSeconds())
         elseif predictionMode == "Infront HRP" then
             local studs = tonumber(predictionBox.Text) or 0
-            if velocity.Magnitude > movementThreshold then
-                return targetHRP.Position + (targetHRP.CFrame.LookVector * studs)
-            end
+            if velocity.Magnitude > movementThreshold then return targetHRP.Position + (targetHRP.CFrame.LookVector * studs) end
         elseif predictionMode == "Infront HRP (Ping Adjust)" then
             if velocity.Magnitude <= movementThreshold then return targetHRP.Position end
             return targetHRP.Position + (targetHRP.CFrame.LookVector * (getPingSeconds() * 60))
-        else -- Velocity mode
+        else
             local prediction = tonumber(predictionBox.Text) or 0
             if velocity.Magnitude <= movementThreshold then return targetHRP.Position end
             return targetHRP.Position + (velocity * (prediction / 60))
@@ -260,11 +407,8 @@ task.spawn(function()
                     local aimPos = CalculateAimPosition(targetHRP)
                     if aimPos then
                         for i, arg in pairs(args) do
-                            if typeof(arg) == "Vector3" then
-                                args[i] = aimPos
-                            elseif typeof(arg) == "CFrame" then
-                                args[i] = CFrame.new(aimPos)
-                            end
+                            if typeof(arg) == "Vector3" then args[i] = aimPos
+                            elseif typeof(arg) == "CFrame" then args[i] = CFrame.new(aimPos) end
                         end
                         return namecall(self, unpack(args))
                     end
@@ -274,20 +418,57 @@ task.spawn(function()
         end)
     end
 
-    --// LOGIC 2: XOAY NHÂN VẬT ĐỒNG BỘ CAMERA
+    --// LOGIC CẢI TIẾN LUỒNG AUTO COIN FLIP V12 ĐỘC LẬP (Chống Giật Lag 100%)
+    task.spawn(function()
+        while true do
+            if autoCoinflip then
+                locateCoinFlipObjects()
+                
+                local currentCharges = 0
+                if targetChargesLabel and targetChargesLabel.Parent then
+                    currentCharges = tonumber(targetChargesLabel.Text) or 0
+                end
+                
+                -- Chỉ tự động tung khi số Charges thực tế ĐANG NHỎ HƠN mốc giới hạn đã chọn trên nút bấm
+                if currentCharges < maxChargesLimit then
+                    if RemoteEvent then
+                        pcall(function()
+                            RemoteEvent:FireServer("UseActorAbility", "CoinFlip")
+                            RemoteEvent:FireServer("UseActorAbility", "Coinflip")
+                        end)
+                    end
+                    
+                    if targetCoinFlipBtn and targetCoinFlipBtn.Parent then
+                        extremeClick(targetCoinFlipBtn)
+                    end
+                end
+            end
+            
+            -- Nghỉ chuẩn 1.76 giây để giải phóng bộ nhớ hoàn toàn
+            task.wait(coinflipCooldown)
+        end
+    end)
+
+    --// LOGIC 2: RENDERING LOOP CHỈ XỬ LÝ CAMERA AIMBOT (Giữ game mượt mà)
     RunService.RenderStepped:Connect(function()
         if not active or not Humanoid or not HRP then return end
-        
         local isVisible = isFlintlockVisible()
+        
         if isVisible and not prevFlintVisibleAim and not aiming then
             lastTriggerTime = tick()
             aiming = true
+            messageSentThisAim = false
         end
         prevFlintVisibleAim = isVisible
         
         if aiming then
             local elapsed = tick() - lastTriggerTime
             local targetHRP, _ = getValidTarget()
+            
+            if targetHRP and messageWhenAim and not messageSentThisAim then
+                messageSentThisAim = true
+                sendChatMessage(messageBox.Text)
+            end
             
             if aimMode == "360" then
                 if elapsed <= spinDuration then
@@ -334,7 +515,7 @@ task.spawn(function()
     end)
 end)
 
---// QUÉT DỌN LIÊN TỤC: Xóa sổ các bảng thông báo rác ẩn menu
+--// QUÉT DỌN LIÊN TỤC
 task.spawn(function()
     while task.wait(0.1) do
         for _, obj in pairs(CoreGui:GetDescendants()) do
