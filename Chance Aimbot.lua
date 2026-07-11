@@ -155,13 +155,13 @@ task.spawn(function()
     autoCoinflipToggle.Text = "Auto Coinflip: OFF"
     autoCoinflipToggle.Parent = mainFrame
 
-    -- ĐÃ CHỈNH SỬA: Chuyển pointsTriggerBox cũ thành Nút bấm chuyển Mode lựa chọn số lượng Charges
+    -- ĐÃ CHỈNH SỬA TÊN: "Charges: 1/2/3"
     local chargesLimitButton = Instance.new("TextButton")
     chargesLimitButton.Size = UDim2.new(0, 140, 0, 30)
     chargesLimitButton.LayoutOrder = 9
     chargesLimitButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
     chargesLimitButton.TextColor3 = Color3.new(1, 1, 1)
-    chargesLimitButton.Text = "Stop at Charges: 2" -- Mặc định ban đầu là mốc 2
+    chargesLimitButton.Text = "Charges: 2"
     chargesLimitButton.Visible = false
     chargesLimitButton.Parent = mainFrame
 
@@ -177,9 +177,8 @@ task.spawn(function()
     local messageWhenAim = false
     local messageSentThisAim = false
     
-    -- Cấu hình Coin Flip V12 tối ưu chống lag mới
     local autoCoinflip = false
-    local maxChargesLimit = 2 -- Lưu trữ số lượng giới hạn hiện tại
+    local maxChargesLimit = 2
     local coinflipCooldown = 1.76 
 
     -- Các biến ghim mục tiêu UI Coin Flip
@@ -246,7 +245,7 @@ task.spawn(function()
 
     spinSpeedBox.FocusLost:Connect(function() spinDuration = tonumber(spinSpeedBox.Text) or 0.5 end)
     
-    -- ĐÃ CHỈNH SỬA: Logic click chuột đổi mốc theo vòng lặp tuần hoàn (1 -> 2 -> 3 -> 1)
+    -- Logic click đổi tên mới
     chargesLimitButton.MouseButton1Click:Connect(function()
         if maxChargesLimit == 1 then
             maxChargesLimit = 2
@@ -255,7 +254,7 @@ task.spawn(function()
         else
             maxChargesLimit = 1
         end
-        chargesLimitButton.Text = "Stop at Charges: " .. tostring(maxChargesLimit)
+        chargesLimitButton.Text = "Charges: " .. tostring(maxChargesLimit)
     end)
 
     -- Helpers
@@ -281,16 +280,17 @@ task.spawn(function()
         end)
     end
 
-    -- CẢI TIẾN V12: Hàm quét định vị mục tiêu UI Coin Flip (Chỉ chạy định vị 1 lần, chống Lag diện rộng)
     local function locateCoinFlipObjects()
-        if targetChargesLabel and targetCoinFlipBtn and targetChargesLabel.Parent and targetCoinFlipBtn.Parent then
+        if targetChargesLabel and targetCoinFlipBtn and targetChargesLabel:IsDescendantOf(game) and targetCoinFlipBtn:IsDescendantOf(game) then
             return 
         end
+
+        targetChargesLabel = nil
+        targetCoinFlipBtn = nil
 
         pcall(function()
             for _, obj in ipairs(PlayerGui:GetDescendants()) do
                 if obj:IsA("GuiButton") or obj:IsA("ImageButton") or obj:IsA("TextButton") then
-                    -- Tìm đúng nhãn chứa số charges thật (0-3) ở nút Reroll / One shot
                     local isRef = false
                     for _, child in ipairs(obj:GetDescendants()) do
                         if child:IsA("TextLabel") then
@@ -320,7 +320,6 @@ task.spawn(function()
                         end
                     end
                     
-                    -- Tìm nút Coin Flip
                     if not targetCoinFlipBtn then
                         for _, child in ipairs(obj:GetDescendants()) do
                             if child:IsA("TextLabel") and string.find(string.lower(child.Text), "coin") then
@@ -334,7 +333,6 @@ task.spawn(function()
         end)
     end
 
-    -- Hàm ép nổ toàn diện kết nối (Bấm chuột ảo bọc lót V12 chuẩn xác)
     local function extremeClick(button)
         if not button then return end
         local events = {"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated", "InputBegan", "TouchTap"}
@@ -394,7 +392,6 @@ task.spawn(function()
         return flint and flint.Transparency < 1 or false
     end
 
-    --// LOGIC 1: HOOK REMOTE EVENT ÉP TỌA ĐỘ QUA MẠNG
     if RemoteEvent then
         local namecall
         namecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -418,7 +415,6 @@ task.spawn(function()
         end)
     end
 
-    --// LOGIC CẢI TIẾN LUỒNG AUTO COIN FLIP V12 ĐỘC LẬP (Chống Giật Lag 100%)
     task.spawn(function()
         while true do
             if autoCoinflip then
@@ -429,7 +425,6 @@ task.spawn(function()
                     currentCharges = tonumber(targetChargesLabel.Text) or 0
                 end
                 
-                -- Chỉ tự động tung khi số Charges thực tế ĐANG NHỎ HƠN mốc giới hạn đã chọn trên nút bấm
                 if currentCharges < maxChargesLimit then
                     if RemoteEvent then
                         pcall(function()
@@ -444,12 +439,10 @@ task.spawn(function()
                 end
             end
             
-            -- Nghỉ chuẩn 1.76 giây để giải phóng bộ nhớ hoàn toàn
             task.wait(coinflipCooldown)
         end
     end)
 
-    --// LOGIC 2: RENDERING LOOP CHỈ XỬ LÝ CAMERA AIMBOT (Giữ game mượt mà)
     RunService.RenderStepped:Connect(function()
         if not active or not Humanoid or not HRP then return end
         local isVisible = isFlintlockVisible()
@@ -492,7 +485,7 @@ task.spawn(function()
                     aiming = false
                     if originalAutoRotate ~= nil then Humanoid.AutoRotate = originalAutoRotate originalAutoRotate = nil end
                 end
-            else -- Normal Mode
+            else 
                 if elapsed <= aimDuration then
                     if not originalAutoRotate then originalAutoRotate = Humanoid.AutoRotate end
                     Humanoid.AutoRotate = false
