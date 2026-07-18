@@ -172,7 +172,7 @@ task.spawn(function()
     local aimDuration = 1.51
     local spinDuration = 0.5
     local movementThreshold = 0.5
-    local aimTargets = {"Slasher", "c00lkidd", "JohnDoe", "1x1x1x1", "Noli", "Guest666", "Nosferatu", "REDZ_GUY", "skibidi", "kibidi", "tommylikesroblox"}
+    local aimTargets = {"Slasher", "c00lkidd", "JohnDoe", "1x1x1x1", "Noli", "Guest666", "Nosferatu", "Sixer", "#SixerHunt", "Azure"}
 
     local messageWhenAim = false
     local messageSentThisAim = false
